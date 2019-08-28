@@ -4,6 +4,8 @@ fs = require 'fs'
 cheerio = require 'cheerio'
 html5Lint = require 'html5-lint'
 q = require 'q'
+Entities = require('html-entities').XmlEntities
+entities = new Entities()
 
 module.exports = class App
 
@@ -84,10 +86,12 @@ module.exports = class App
           imgHtml = imgHtml.replace /([^\/])>/g, "$1/>"
           imgHtml = imgHtml.replace /data-image="{'src': '([^<]*)'}"/g, "data-image='{\"src\": \"$1\"}'"
 
+          imgDecoded = entities.decode imgHtml
+
           escapedKey = key.replace /[\\[.+*?(){|^$]/g, "\\$&"
-          console.log 'REPLACE:'.magenta, key, '<===>'.yellow, imgHtml
+          console.log 'REPLACE:'.magenta, key, '<===>'.yellow, imgDecoded
           regexKey = new RegExp escapedKey, 'gi'
-          data = data.replace regexKey, imgHtml
+          data = data.replace regexKey, imgDecoded
 
         @writeHtml data
 
@@ -162,7 +166,7 @@ module.exports = class App
         console.log ' The file has been overwritten'.green
 
         @checkHtml5(@sourcePath).then () ->
-          console.log 'Completed!'
+          console.log 'Completed!'.green
 
 
   checkHtml5: (pPath) ->
