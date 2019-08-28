@@ -20,14 +20,18 @@ module.exports = class App
     deferred = q.defer()
     fs.readdir process.cwd(), (err, files) ->
       if err
-        console.log 'err'.red, err
+        console.log 'err:'.red, err
+        deferred.reject err 
       else
         filesByExt = files.filter (file) ->
           file.indexOf('htm') isnt -1
 
-        console.log 'HTML files:', filesByExt
-
-      deferred.resolve()
+        if filesByExt.length is 0
+          console.log 'No HTML files found!'.red
+          deferred.reject()
+        else
+          console.log 'HTML files:', (filesByExt.join(', ')).yellow
+          deferred.resolve()
 
     deferred.promise
 
@@ -176,7 +180,5 @@ module.exports = class App
         deferred.resolve()
 
     deferred.promise
-
-console.log 'NodeJS start'.magenta
 
 app = new App()
