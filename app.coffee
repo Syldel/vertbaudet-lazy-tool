@@ -10,7 +10,27 @@ module.exports = class App
   sourcePath: undefined
 
   constructor: ->
-    @startPrompt()
+    console.log "process.cwd()".cyan, process.cwd()
+
+    @showHtmFiles().then () =>
+      @startPrompt()
+
+
+  showHtmFiles: ->
+    deferred = q.defer()
+    fs.readdir process.cwd(), (err, files) ->
+      if err
+        console.log 'err'.red, err
+      else
+        filesByExt = files.filter (file) ->
+          file.indexOf('htm') isnt -1
+
+        console.log 'HTML files:', filesByExt
+
+      deferred.resolve()
+
+    deferred.promise
+
 
   startPrompt: ->
     console.log "Please enter directory path".blue.bold
@@ -22,7 +42,8 @@ module.exports = class App
           pattern: /^[a-zA-Z0-9\/\\\-_.:]+$/
           message: 'Source must be only letters, numbers and/or dashes, dots'
           required: true
-          default: '../Vertbaudet/resadmin/VertbaudetFr/campagnes/96_S34_RDC_HEADER/_test.htm'
+          #default: '../Vertbaudet/resadmin/VertbaudetFr/campagnes/96_S34_RDC_HEADER/_test.htm'
+          default: '_test.htm'
 
     prompt.get promptSchema, (err, result) =>
       if err
@@ -30,10 +51,11 @@ module.exports = class App
       else
         console.log 'Command-line input received:'.green
         console.log 'source:', (result.source).cyan
-        @sourcePath = result.source
+        @sourcePath = process.cwd() + '/' + result.source
 
-        @checkHtml5(@sourcePath).then () =>
-          @readFile()
+        console.log 'Source path is:', (@sourcePath).green
+
+        @readFile()
 
 
   readFile: ->
@@ -96,8 +118,6 @@ module.exports = class App
       else
         console.log 'No imageName found for "alt"'.red
 
-    console.log ' pChImg.attr("title"):', pChImg.attr('title')
-    console.log " pChImg.attr('title') is '':", (pChImg.attr('title') is '')
     if pChImg.attr('title') is ''
       console.log ' Remove empty title attribute'
       pChImg.removeAttr 'title'
@@ -132,10 +152,13 @@ module.exports = class App
   writeHtml: (pData) ->
     console.log 'Overwrite file !!!'.yellow
     fs.writeFile @sourcePath, pData, 'utf8', (err, data) =>
-      console.log ' The file has been overwritten'.green
+      if err
+        console.log ' Error to write the file'.red, err
+      else
+        console.log ' The file has been overwritten'.green
 
-      @checkHtml5(@sourcePath).then () ->
-        console.log '@checkHtml5 DONE'
+        @checkHtml5(@sourcePath).then () ->
+          console.log 'Completed!'
 
 
   checkHtml5: (pPath) ->
@@ -147,8 +170,8 @@ module.exports = class App
 
       html5Lint html, (err, results) ->
         results.messages.forEach (msg) ->
-          console.log 'HTML5 Lint msg.message:'.red, msg.message
-          console.log '           msg.extract:'.red, msg.extract, (' (' + msg.lastLine + ')').blue
+          console.log 'HTML5 Lint message:'.red, msg.message
+          console.log '           extract:'.red, msg.extract, (' (' + msg.lastLine + ')').blue
 
         deferred.resolve()
 

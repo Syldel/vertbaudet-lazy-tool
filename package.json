@@ -1,11 +1,16 @@
 {
-  "name": "tools-for-vb",
+  "name": "vertbaudet-tools",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "description": "Tools to work on vertbaudet website performances",
+  "main": "app.js",
+  "repository": {
+    "type": "git",
+    "url": "git@github.com:Syldel/vertbaudet-tools.git"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "coffee app.coffee"
+    "start": "coffee app.coffee",
+    "build": "coffee -c app.coffee"
   },
   "author": "Sylvain D.",
   "license": "ISC",
@@ -17,5 +22,9 @@
     "html5-lint": "^0.3.0",
     "prompt": "^1.0.0",
     "q": "^1.5.1"
+  },
+  "homepage": "https://github.com/Syldel/vertbaudet-tools#readme",
+  "bin": {
+    "vb-tools": "bin/vbtools.js"
   }
 }
