@@ -4,6 +4,7 @@ fs = require 'fs'
 cheerio = require 'cheerio'
 html5Lint = require 'html5-lint'
 q = require 'q'
+commandLineArgs = require 'command-line-args'
 Entities = require('html-entities').XmlEntities
 entities = new Entities()
 
@@ -11,31 +12,185 @@ module.exports = class App
 
   sourcePath: undefined
 
+  scssFilePath: undefined
+  scssData: undefined
+  scssAnalyse: undefined
+
   constructor: ->
     console.log "process.cwd()".cyan, process.cwd()
 
-    @showHtmFiles().then () =>
+    optionDefinitions = [
+      { name: 'scss', alias: 's', type: String }
+    ]
+
+    options = commandLineArgs optionDefinitions
+    console.log 'options:', options
+
+    @getFilesByExt('htm').then () =>
+
+      if options.scss
+        @scssProcessus options.scss
+
+      else
+        @getFilesByExt('scss').then (scssFiles) =>
+          if scssFiles.length is 1
+            @scssFilePath = scssFiles[0]
+            @scssProcessus @scssFilePath
+          else
+            console.log ('0 or more than 1 scss files found! (' + scssFiles + ')').red
+            @startPrompt()
+
+
+  scssProcessus: (pPath) ->
+    @getBackgroundsInScss pPath
+    .then (pScssData) =>
+      @scssData = pScssData
       @startPrompt()
 
 
-  showHtmFiles: ->
+  getFilesByExt: (pExt) ->
     deferred = q.defer()
     fs.readdir process.cwd(), (err, files) ->
       if err
         console.log 'err:'.red, err
-        deferred.reject err 
+        deferred.reject err
       else
         filesByExt = files.filter (file) ->
-          file.indexOf('htm') isnt -1
+          file.indexOf('.' + pExt) isnt -1
 
         if filesByExt.length is 0
-          console.log 'No HTML files found!'.red
+          console.log ('No .' + pExt + ' files found!').red
           deferred.reject()
         else
-          console.log 'HTML files:', (filesByExt.join(', ')).yellow
-          deferred.resolve()
+          console.log ' => .' + pExt + ' files:', (filesByExt.join(', ')).yellow
+          deferred.resolve filesByExt
 
     deferred.promise
+
+
+  getBackgroundsInScss: (pPath) ->
+    console.log 'Background images SCSS analyse start!'.magenta
+    deferred = q.defer()
+
+    fs.readFile pPath, 'utf8', (err, data) =>
+      if err
+        console.log 'err:'.red, err
+      else
+        regex = /background(\-image)?[\s]*:[\s]*url\(([^)]*)\)[;]?/gi
+        bgs = data.match regex
+
+        @scssAnalyse = {}
+
+        for bg in bgs
+          #console.log '\nbg:'.blue, bg
+          bgEsc = bg.replace /[\\[.+*?(){|^$]/g, "\\$&"
+          re = new RegExp '&?([.#]{1}[^.# {\)]+)[^.#]*{[^{]*' + bgEsc + '[^}]*}', 'gi'
+          regData = re.exec data
+
+          if regData and regData[0]
+            bloc = regData[0]
+            #console.log 'bloc:', bloc
+
+          if regData and regData[1]
+            classOrId = regData[1]
+            #console.log 'classOrId:'.green, classOrId
+            @scssAnalyse[classOrId] =
+              background: bg
+              block: bloc
+          else
+            #console.log 'regData:'.red, regData
+
+          if bloc.indexOf('lazy-bg') is -1
+            #console.log 'The block doesn\'t contains ".lazy-bg" ?'
+            if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = no
+          else
+            #console.log 'The block already contains ".lazy-bg" ? ', bloc.indexOf 'lazy-bg'
+            if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = yes
+
+        deferred.resolve data
+
+    deferred.promise
+
+
+  addLazyPartInScssPart: (pVal) ->
+    if not pVal['lazy-bg']
+      # Be really careful with \s or \(, we need to protect the \
+      # And sure we need to protect the ' too.
+      regBg = new RegExp '(([ \\t]*)background[^;]*:[\\s]*url\\([^)]*\\)[^;]*;)', 'gi'
+      newPart = pVal.block.replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
+      console.log '=====> newPart'.yellow, newPart
+      @scssData = @scssData.replace pVal.block, newPart
+
+
+  analyseHtmlForBackground: (pHtmlData) ->
+    console.log '\nAnalyse background images'
+
+    cheerioElemsObject = {}
+    for key, val of @scssAnalyse
+      #console.log '\nkey, val =>', key, val
+
+      if key and key.substr(0, 1) is '.'
+        className = key.substr 1
+        # Be really careful with \s, we need to protect the \
+        # And sure we need to protect the ' too.
+        classRe = new RegExp '<[^>]*class=[^>]*[\\s|"|\']{1}' + className + '[\\s|"|\']{1}[^>]*>', 'gi'
+        classElems = pHtmlData.match classRe
+
+        if classElems
+          for elem in classElems
+            cheerioElemsObject[elem] = cheerio.load elem
+            cheerEl = cheerioElemsObject[elem]('.' + className)
+            cheerEl.addClass 'lazy-bg'
+            cheerEl.attr 'data-loaded', 'false'
+
+          @addLazyPartInScssPart val
+        else
+          console.log ('No DOM elements found for ' + className + ' class!').red
+
+      if key and key.substr(0, 1) is '#'
+        idName = key.substr 1
+        # Be really careful with \s, we need to protect the \
+        # And sure we need to protect the ' too.
+        idRe = new RegExp '<[^>]*id=[^>]*[\\s|"|\']{1}' + idName + '[\\s|"|\']{1}[^>]*>', 'gi'
+        idElems = pHtmlData.match idRe
+
+        if idElems
+          for elem in idElems
+            cheerioElemsObject[elem] = cheerio.load elem
+            cheerEl = cheerioElemsObject[elem]('#' + idName)
+            cheerEl.addClass 'lazy-bg'
+            cheerEl.attr 'data-loaded', 'false'
+
+          @addLazyPartInScssPart val
+        else
+          console.log ('No DOM elements found for  ' + idName + '  id!').red
+
+    for key, cEl of cheerioElemsObject
+      elHtml = cEl('body').html()
+      elHtml = elHtml.replace /&quot;/g, "'"
+      # Remove close tag
+      elHtml = elHtml.replace /<\/[^>]+>/g, ''
+
+      elDecoded = entities.decode elHtml
+
+      escapedKey = key.replace /[\\[.+*?(){|^$]/g, "\\$&"
+
+      if key isnt elDecoded
+        console.log 'REPLACE:'.magenta, key, '<===>'.yellow, elDecoded
+        regexKey = new RegExp escapedKey, 'gi'
+        pHtmlData = pHtmlData.replace regexKey, elDecoded
+      #else
+        #console.log ' Old and New elements are same!'.blue
+
+
+    console.log '\n'
+    @writeDataInFile 'html', @sourcePath, pHtmlData
+    .then () =>
+      #@checkHtml5(@sourcePath).then () ->
+      #  console.log 'Completed!'.green
+      @writeDataInFile 'scss', @scssFilePath, @scssData
+      #.then () =>
+      #  console.log 'Completed!'.green
 
 
   startPrompt: ->
@@ -48,7 +203,6 @@ module.exports = class App
           pattern: /^[a-zA-Z0-9\/\\\-_.:]+$/
           message: 'Source must be only letters, numbers and/or dashes, dots'
           required: true
-          #default: '../Vertbaudet/resadmin/VertbaudetFr/campagnes/96_S34_RDC_HEADER/_test.htm'
           default: '_test.htm'
 
     prompt.get promptSchema, (err, result) =>
@@ -61,10 +215,10 @@ module.exports = class App
 
         console.log 'Source path is:', (@sourcePath).green
 
-        @readFile()
+        @lazyImg()
 
 
-  readFile: ->
+  lazyImg: ->
     console.log '\n\nLook for <img >'.blue
     fs.readFile @sourcePath, 'utf8', (err, data) =>
       if err
@@ -89,11 +243,16 @@ module.exports = class App
           imgDecoded = entities.decode imgHtml
 
           escapedKey = key.replace /[\\[.+*?(){|^$]/g, "\\$&"
-          console.log 'REPLACE:'.magenta, key, '<===>'.yellow, imgDecoded
-          regexKey = new RegExp escapedKey, 'gi'
-          data = data.replace regexKey, imgDecoded
 
-        @writeHtml data
+          if key isnt imgDecoded
+            console.log 'REPLACE:'.magenta, key, '<===>'.yellow, imgDecoded
+            regexKey = new RegExp escapedKey, 'gi'
+            data = data.replace regexKey, imgDecoded
+          #else
+          #  console.log ' Old and New elements are same!'.blue
+
+        @analyseHtmlForBackground data
+        #@writeHtml data
 
 
   imgHandle: (pChImg) ->
@@ -157,16 +316,18 @@ module.exports = class App
       pChImg.attr 'src', 'data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw=='
 
 
-  writeHtml: (pData) ->
-    console.log 'Overwrite file !!!'.yellow
-    fs.writeFile @sourcePath, pData, 'utf8', (err, data) =>
+  writeDataInFile: (pType, pPath, pData) ->
+    console.log ('Overwrite ' + pType + ' file !!!').yellow
+    deferred = q.defer()
+    fs.writeFile pPath, pData, 'utf8', (err, data) =>
       if err
-        console.log ' Error to write the file'.red, err
+        console.log (' Error to write ' + pType + ' the file').red, err
+        deferred.reject err
       else
-        console.log ' The file has been overwritten'.green
+        console.log (' The ' + pType + ' file has been overwritten').green
+        deferred.resolve()
 
-        @checkHtml5(@sourcePath).then () ->
-          console.log 'Completed!'.green
+    deferred.promise
 
 
   checkHtml5: (pPath) ->
