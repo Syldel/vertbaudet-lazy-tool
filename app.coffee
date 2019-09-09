@@ -153,30 +153,32 @@ module.exports = class App
 
         @scssAnalyse = []
 
+        # Remove doubloons, (@getParentSelector will manage duplicate items)
+        bgs = bgs.filter (item, index) ->
+          bgs.indexOf(item) is index
+
         for bg in bgs
           console.log '\nbg:'.green, bg
-
-          @scssAnalyse.push
-            scssFile: pPath
-            background: bg
 
           jSelectors = @getParentSelector [bg], data
           console.log 'jSelectors:'.green, jSelectors
 
+          for jSel in jSelectors
+            @scssAnalyse.push
+              scssFile: pPath
+              background: bg
+              selector: jSel
+              lazyBg: no
+
         console.log '\n'
         jLazyBgSelectors = @getParentSelector ['.lazy-bg'], data
-        for lazyBg in jLazyBgSelectors
-          console.log 'lazyBg :'.green, lazyBg
-        return
+        for lazyBgSel in jLazyBgSelectors
+          console.log 'lazyBgSel :'.cyan, lazyBgSel
+          for bgEl in @scssAnalyse
+            if bgEl.selector is lazyBgSel
+              bgEl.lazyBg = yes
 
-        ###
-        if bloc.indexOf('lazy-bg') is -1
-          #console.log 'The block doesn\'t contains ".lazy-bg" ?'
-          if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = no
-        else
-          #console.log 'The block already contains ".lazy-bg" ? ', bloc.indexOf 'lazy-bg'
-          if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = yes
-        ###
+        console.log '@scssAnalyse:', @scssAnalyse
 
         #deferred.resolve data
 
