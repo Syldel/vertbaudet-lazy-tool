@@ -9,3 +9,4 @@ tmp
 *.bat
 *_backup_folder
 app.js
+gulpfile.js

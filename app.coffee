@@ -21,16 +21,18 @@ module.exports = class App
 
     optionDefinitions = [
       { name: 'scss', alias: 's', type: String }
+      { name: 'ignore-scss', alias: 'i', type: Boolean }
     ]
 
     options = commandLineArgs optionDefinitions
     console.log 'options:', options
 
-    @getFilesByExt('htm').then () =>
+    if options.scss
+      @scssProcessus options.scss
 
-      if options.scss
-        @scssProcessus options.scss
-
+    else
+      if options['ignore-scss']
+        @startHtmPrompt()
       else
         @getFilesByExt('scss').then (scssFiles) =>
           if scssFiles.length is 1
@@ -38,14 +40,14 @@ module.exports = class App
             @scssProcessus @scssFilePath
           else
             console.log ('0 or more than 1 scss files found! (' + scssFiles + ')').red
-            @startPrompt()
+            @startHtmPrompt()
 
 
   scssProcessus: (pPath) ->
     @getBackgroundsInScss pPath
     .then (pScssData) =>
       @scssData = pScssData
-      @startPrompt()
+      @startHtmPrompt()
 
 
   getFilesByExt: (pExt) ->
@@ -56,7 +58,7 @@ module.exports = class App
         deferred.reject err
       else
         filesByExt = files.filter (file) ->
-          file.indexOf('.' + pExt) isnt -1
+          file.indexOf('.' + pExt) isnt -1 # and file.substr(0, 1) isnt '_'
 
         if filesByExt.length is 0
           console.log ('No .' + pExt + ' files found!').red
@@ -68,6 +70,75 @@ module.exports = class App
     deferred.promise
 
 
+  getParentSelector: (pBlocks, pData, pRemBrakToOpenArr = [1], pResult = ['']) ->
+    #console.log '\nLook Parent Of '.magenta, pTarget
+    #console.log '\ngetParentSelector pResult'.magenta, pResult
+
+    results = []
+    blocks = []
+    braks = []
+    count = -1
+    for pTarget in pBlocks
+      count++
+
+      regTarget = pTarget.replace /[\\[.+*?(){|^$]/g, "\\$&"
+      re = new RegExp '([\\s\\w-#.&:]+){[^{]*' + regTarget , 'gi' # + '[^}]*}', 'gi'
+
+      pRemBrakToOpen = pRemBrakToOpenArr[count]
+      rEl = pResult[count]
+      #console.log ' ' + count + ' rEl:', rEl
+
+      whileCount = 0
+      currentWhileHappends = no
+      while(regData = re.exec pData)
+        whileCount++
+        currentWhileHappends = yes
+        if regData
+          #console.log '\nregData.index:'.yellow, regData.index
+          if regData[0]
+            bloc = regData[0]
+
+            diffBlock = bloc.replace pTarget, ''
+            #console.log 'diffBlock:'.magenta, diffBlock
+            #console.log '  Count of {  =>', (diffBlock.match(/{/g) or []).length,
+            #  ' /  Count of }  =>', (diffBlock.match(/}/g) or []).length
+
+          if regData[1]
+            parentSel = String(regData[1]).trim()
+            #console.log 'regData[1] parentSel:'.cyan, parentSel
+
+            openBrakCount = (diffBlock.match(/{/g) or []).length
+            closeBrakCount = (diffBlock.match(/}/g) or []).length
+            brakDiff = closeBrakCount - openBrakCount + pRemBrakToOpen
+            #console.log 'brakDiff:', brakDiff
+
+            if brakDiff < 1
+              pResult2 = parentSel + ' ' + rEl
+              brakDiff = 1 # We look for the top level
+              results.push pResult2.trim()
+              blocks.push bloc
+              braks.push brakDiff
+            else
+              #console.log ' Ignore this element'.blue
+              results.push rEl
+              blocks.push bloc
+              braks.push brakDiff
+
+      #console.log 'whileCount:', whileCount
+      if not currentWhileHappends
+        results = results.concat [rEl]
+        blocks = blocks.concat [pTarget]
+        braks = braks.concat [pRemBrakToOpen]
+
+    if whileCount is 0
+      #console.log ' COMPLETE'
+      return pResult
+    else
+      selectResult = @getParentSelector blocks, pData, braks, results
+      #console.log 'selectResult', count, ' => ', selectResult
+      return selectResult
+
+
   getBackgroundsInScss: (pPath) ->
     console.log 'Background images SCSS analyse start!'.magenta
     deferred = q.defer()
@@ -75,39 +146,39 @@ module.exports = class App
     fs.readFile pPath, 'utf8', (err, data) =>
       if err
         console.log 'err:'.red, err
+        deferred.reject err
       else
         regex = /background(\-image)?[\s]*:[\s]*url\(([^)]*)\)[;]?/gi
         bgs = data.match regex
 
-        @scssAnalyse = {}
+        @scssAnalyse = []
 
         for bg in bgs
-          #console.log '\nbg:'.blue, bg
-          bgEsc = bg.replace /[\\[.+*?(){|^$]/g, "\\$&"
-          re = new RegExp '&?([.#]{1}[^.# {\)]+)[^.#]*{[^{]*' + bgEsc + '[^}]*}', 'gi'
-          regData = re.exec data
+          console.log '\nbg:'.green, bg
 
-          if regData and regData[0]
-            bloc = regData[0]
-            #console.log 'bloc:', bloc
+          @scssAnalyse.push
+            scssFile: pPath
+            background: bg
 
-          if regData and regData[1]
-            classOrId = regData[1]
-            #console.log 'classOrId:'.green, classOrId
-            @scssAnalyse[classOrId] =
-              background: bg
-              block: bloc
-          else
-            #console.log 'regData:'.red, regData
+          jSelectors = @getParentSelector [bg], data
+          console.log 'jSelectors:'.green, jSelectors
 
-          if bloc.indexOf('lazy-bg') is -1
-            #console.log 'The block doesn\'t contains ".lazy-bg" ?'
-            if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = no
-          else
-            #console.log 'The block already contains ".lazy-bg" ? ', bloc.indexOf 'lazy-bg'
-            if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = yes
+        console.log '\n'
+        jLazyBgSelectors = @getParentSelector ['.lazy-bg'], data
+        for lazyBg in jLazyBgSelectors
+          console.log 'lazyBg :'.green, lazyBg
+        return
 
-        deferred.resolve data
+        ###
+        if bloc.indexOf('lazy-bg') is -1
+          #console.log 'The block doesn\'t contains ".lazy-bg" ?'
+          if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = no
+        else
+          #console.log 'The block already contains ".lazy-bg" ? ', bloc.indexOf 'lazy-bg'
+          if classOrId then @scssAnalyse[classOrId]['lazy-bg'] = yes
+        ###
+
+        #deferred.resolve data
 
     deferred.promise
 
@@ -193,29 +264,36 @@ module.exports = class App
       #  console.log 'Completed!'.green
 
 
-  startPrompt: ->
-    console.log "Please enter directory path".blue.bold
-    prompt.start()
+  startHtmPrompt: ->
 
-    promptSchema =
-      properties:
-        source:
-          pattern: /^[a-zA-Z0-9\/\\\-_.:]+$/
-          message: 'Source must be only letters, numbers and/or dashes, dots'
-          required: true
-          default: '_test.htm'
-
-    prompt.get promptSchema, (err, result) =>
-      if err
-        console.log "error:".red, err
+    @getFilesByExt('htm').then (htmFiles) =>
+      if htmFiles.length is 1
+        htmlFile = htmFiles[0]
       else
-        console.log 'Command-line input received:'.green
-        console.log 'source:', (result.source).cyan
-        @sourcePath = process.cwd() + '/' + result.source
+        htmlFile = '_test.htm'
 
-        console.log 'Source path is:', (@sourcePath).green
+      console.log "Please enter directory path".blue.bold
+      prompt.start()
 
-        @lazyImg()
+      promptSchema =
+        properties:
+          source:
+            pattern: /^[a-zA-Z0-9\/\\\-_.:]+$/
+            message: 'Source must be only letters, numbers and/or dashes, dots'
+            required: true
+            default: htmlFile
+
+      prompt.get promptSchema, (err, result) =>
+        if err
+          console.log "error:".red, err
+        else
+          console.log 'Command-line input received:'.green
+          console.log 'source:', (result.source).cyan
+          @sourcePath = process.cwd() + '/' + result.source
+
+          console.log 'Source path is:', (@sourcePath).green
+
+          @lazyImg()
 
 
   lazyImg: ->
@@ -273,6 +351,8 @@ module.exports = class App
             console.log ' alt imageName (from "data-image") :', imageName
 
       if imageName
+        # Get Last element in path
+        imageName = imageName.split('/').pop()
         # Remove extension
         imageName = imageName.replace /\.[^.]*$/, ""
         # Remove - and _
@@ -319,7 +399,7 @@ module.exports = class App
   writeDataInFile: (pType, pPath, pData) ->
     console.log ('Overwrite ' + pType + ' file !!!').yellow
     deferred = q.defer()
-    fs.writeFile pPath, pData, 'utf8', (err, data) =>
+    fs.writeFile pPath, pData, 'utf8', (err, data) ->
       if err
         console.log (' Error to write ' + pType + ' the file').red, err
         deferred.reject err

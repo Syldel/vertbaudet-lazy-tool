@@ -28,5 +28,10 @@
   "homepage": "https://github.com/Syldel/vertbaudet-tools#readme",
   "bin": {
     "vb-tools": "bin/vbtools.js"
+  },
+  "devDependencies": {
+    "gulp": "^3.9.1",
+    "gulp-coffee": "^3.0.3",
+    "gulp-coffeelint": "^0.6.0"
   }
 }
