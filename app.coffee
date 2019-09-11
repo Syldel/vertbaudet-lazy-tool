@@ -148,7 +148,7 @@ module.exports = class App
         console.log 'err:'.red, err
         deferred.reject err
       else
-        regex = /background(\-image)?[\s]*:[\s]*url\(([^)]*)\)[;]?/gi
+        regex = /background(\-image)?[\s]*:[\s]*url\(([^)]*)\)[^;]*;/gi
         bgs = data.match regex
 
         @scssAnalyse = []
@@ -178,82 +178,159 @@ module.exports = class App
             if bgEl.selector is lazyBgSel
               bgEl.lazyBg = yes
 
-        console.log '@scssAnalyse:', @scssAnalyse
+        #console.log '@scssAnalyse:', @scssAnalyse
 
-        #deferred.resolve data
+        deferred.resolve data
 
     deferred.promise
 
+  addLazyPartInScssPart: (pScssObj) ->
+    if not pScssObj.lazyBg
+      scssBackgroundUrl = pScssObj.background.replace /[\\[.+*?(){|^$]/g, "\\$&"
 
-  addLazyPartInScssPart: (pVal) ->
-    if not pVal['lazy-bg']
-      # Be really careful with \s or \(, we need to protect the \
-      # And sure we need to protect the ' too.
-      regBg = new RegExp '(([ \\t]*)background[^;]*:[\\s]*url\\([^)]*\\)[^;]*;)', 'gi'
-      newPart = pVal.block.replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
-      console.log '=====> newPart'.yellow, newPart
-      @scssData = @scssData.replace pVal.block, newPart
+      selRx = String pScssObj.selector
+      selRx = selRx.replace /[\s]*([^\s]+)/g, '$1[\\s{]+[^<]*'
+      selRx = selRx.slice(0, -5) + '[^(]*' # Be sure to get the fist found, Using '(' char
+      selRx += scssBackgroundUrl
+      console.log 'selRx:'.cyan, selRx
+
+      scssBlock = @scssData.match selRx
+      #console.log 'scssBlock:', scssBlock[0]
+
+      #console.log 'pScssObj.background:', pScssObj.background
+      regBg = new RegExp '(([ \t]*)' + scssBackgroundUrl + '[^.]*$)', 'gi'
+      newPart = scssBlock[0].replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
+      #console.log '=====> newPart'.yellow, newPart
+      @scssData = @scssData.replace scssBlock, newPart
+
+
+  buildRegEx: (pHtmlData, pStr, pElems = [], pCaseId = 0) ->
+    #console.log '\nbuildRegEx: pCaseId:', pCaseId, ' pElems.length:', pElems.length
+
+    dblClassMatch = pStr.match /([\w-]+)\.([\w-]+)/g
+    #console.log 'dblClassMatch:', dblClassMatch
+
+    # Build combinaisons
+    classMatchCombs = []
+    if dblClassMatch
+      for dblMatch, i in dblClassMatch
+        dblSplits = dblMatch.split '.'
+
+        for split, k in dblSplits
+          tempArr = []
+          for dblMatch2, j in dblClassMatch
+            dblSplits2 = dblMatch2.split '.'
+
+            if i is 0
+              if k is 0
+                if j is 0
+                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
+                if j is 1
+                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
+
+              if k is 1
+                if j is 0
+                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
+                if j is 1
+                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
+
+            if i is 1
+              if k is 0
+                if j is 0
+                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
+                if j is 1
+                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
+
+              if k is 1
+                if j is 0
+                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
+                if j is 1
+                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
+
+          classMatchCombs.push tempArr
+
+    #console.log 'classMatchCombs:'.cyan, classMatchCombs
+
+    if pCaseId > classMatchCombs.length - 1
+      return pElems
+    else
+      # Manage several classes case
+      classCombs = classMatchCombs[pCaseId]
+      sourceStr = pStr
+      if classCombs
+        for classComb in classCombs
+          #console.log (' Replace ' + classComb[0] + ' with ' + classComb[1] + '').yellow
+          sourceStr = sourceStr.replace classComb[0], classComb[1]
+
+      pCaseId++
+
+      jSelReg = sourceStr.replace /\.([^\s]+)/g, '<[^>]*class=[^>]*[\\s|"|\']{1}$1[\\s|"|\']{1}[^>]*>'
+      jSelReg = jSelReg.replace /\#([^\s]+)/g, '<[^>]*id=[^>]*[\\s|"|\']{1}$1[\\s|"|\']{1}[^>]*>'
+      jSelReg = jSelReg.replace /\s([\w]+)/g, '[^.]*<$1[^>]*>'
+      jSelReg = jSelReg.replace /\s/g, '[^]*'
+
+      jSelReg = jSelReg.replace /([\w]+)\.([\w]+)/g, '$1[^>]*$2'
+
+      # Close last tag
+      #jSelReg = jSelReg + '[^>]*>'
+      #console.log 'jSelReg:', jSelReg
+
+      superRegEx = new RegExp jSelReg, 'gi'
+      elems = pHtmlData.match superRegEx
+
+      #console.log 'internal elems:'.magenta, elems
+      if elems
+        pElems = pElems.concat elems
+
+      return @buildRegEx pHtmlData, pStr, pElems, pCaseId
 
 
   analyseHtmlForBackground: (pHtmlData) ->
     console.log '\nAnalyse background images'
 
-    cheerioElemsObject = {}
-    for key, val of @scssAnalyse
-      #console.log '\nkey, val =>', key, val
+    for scssObj in @scssAnalyse
+      console.log ''
+      #console.log 'scssObj:', scssObj
 
-      if key and key.substr(0, 1) is '.'
-        className = key.substr 1
-        # Be really careful with \s, we need to protect the \
-        # And sure we need to protect the ' too.
-        classRe = new RegExp '<[^>]*class=[^>]*[\\s|"|\']{1}' + className + '[\\s|"|\']{1}[^>]*>', 'gi'
-        classElems = pHtmlData.match classRe
+      if scssObj.selector.indexOf(':before') isnt -1
+        console.log 'Ignore :before'.red
+        continue
 
-        if classElems
-          for elem in classElems
-            cheerioElemsObject[elem] = cheerio.load elem
-            cheerEl = cheerioElemsObject[elem]('.' + className)
-            cheerEl.addClass 'lazy-bg'
-            cheerEl.attr 'data-loaded', 'false'
+      if scssObj.selector.indexOf(':after') isnt -1
+        console.log 'Ignore :after'.red
+        continue
 
-          @addLazyPartInScssPart val
-        else
-          console.log ('No DOM elements found for ' + className + ' class!').red
+      jRegEx = new RegExp ' \\&', 'g'
+      jSelect = String(scssObj.selector).replace jRegEx, ''
+      console.log 'jSelect:', jSelect
 
-      if key and key.substr(0, 1) is '#'
-        idName = key.substr 1
-        # Be really careful with \s, we need to protect the \
-        # And sure we need to protect the ' too.
-        idRe = new RegExp '<[^>]*id=[^>]*[\\s|"|\']{1}' + idName + '[\\s|"|\']{1}[^>]*>', 'gi'
-        idElems = pHtmlData.match idRe
+      elems = @buildRegEx pHtmlData, jSelect
+      #console.log 'elems:'.green, elems
 
-        if idElems
-          for elem in idElems
-            cheerioElemsObject[elem] = cheerio.load elem
-            cheerEl = cheerioElemsObject[elem]('#' + idName)
-            cheerEl.addClass 'lazy-bg'
-            cheerEl.attr 'data-loaded', 'false'
+      if not elems or elems.length is 0
+        console.log ('No DOM elements found for ' + scssObj.background + ' in ' + jSelect + ' !').red
+      else
+        scssObj.html = {}
+        for el in elems
+          #console.log 'el:'.blue, el
+          tagElements = el.match /<.*>/g
+          lastElement = tagElements.pop()
+          #console.log 'lastElement:'.blue, lastElement
 
-          @addLazyPartInScssPart val
-        else
-          console.log ('No DOM elements found for  ' + idName + '  id!').red
+          scssObj.html.cheerio = cheerio.load lastElement
+          cheerEl = scssObj.html.cheerio('*')
+          cheerEl.addClass 'lazy-bg'
+          cheerEl.attr 'data-loaded', 'false'
 
-    for key, cEl of cheerioElemsObject
-      elHtml = cEl('body').html()
-      elHtml = elHtml.replace /&quot;/g, "'"
-      # Remove close tag
-      elHtml = elHtml.replace /<\/[^>]+>/g, ''
+          elHtml = scssObj.html.cheerio('body').html()
+          #console.log 'elHtml:', elHtml
+          elHtml = elHtml.replace /<\/[^>]+>/g, ''
+          console.log 'elHtml (After remove closing tag) :', elHtml
 
-      elDecoded = entities.decode elHtml
+          newEl = el.replace lastElement, elHtml
+          pHtmlData = pHtmlData.replace el, newEl
 
-      escapedKey = key.replace /[\\[.+*?(){|^$]/g, "\\$&"
-
-      if key isnt elDecoded
-        console.log 'REPLACE:'.magenta, key, '<===>'.yellow, elDecoded
-        regexKey = new RegExp escapedKey, 'gi'
-        pHtmlData = pHtmlData.replace regexKey, elDecoded
-      #else
-        #console.log ' Old and New elements are same!'.blue
+        @addLazyPartInScssPart scssObj
 
 
     console.log '\n'
@@ -308,11 +385,12 @@ module.exports = class App
         imgs = data.match regex
 
         cheerioImgsObject = {}
-        for img in imgs
-          cheerioImgsObject[img] = cheerio.load img
+        if imgs
+          for img in imgs
+            cheerioImgsObject[img] = cheerio.load img
 
-          @imgHandle cheerioImgsObject[img]('img')
-          #console.log ' ====> '.yellow, cheerioImgsObject[img]('body').html()
+            @imgHandle cheerioImgsObject[img]('img')
+            #console.log ' ====> '.yellow, cheerioImgsObject[img]('body').html()
 
         for key, cImg of cheerioImgsObject
           imgHtml = cImg('body').html()

@@ -19,23 +19,28 @@
   margin-left: 30px;
   @media screen and (max-width: 1000px) {
     margin-left: 15px;
-    background: url(mark_beaba_media.png) center center #ffffff no-repeat;
+    //background: url(mark_beaba_media.png) center center #ffffff no-repeat;
   }
   @media screen and (max-width: 900px) { margin-left: 10px; }
   @media screen and (max-width: 800px) { margin-left: 5px; }
 
   &.mark_beaba {
-    background: url(mark_beaba.png) center center #ffffff no-repeat;
+    background-image: url(mark_beaba.png) center center #ffffff no-repeat;
     background-size: contain;
-    &.lazy-bg {
-      background-image: none;
-    }
   }
 
   &:hover{ border: solid 2px #afca0a; }
 
   &.new {
     .new-banner {
+        background: url(new-banner-test.png) 0 0 no-repeat;
+
+        &.test-double-class {
+          background: url(test-double-class.png) 0 0 no-repeat;
+          position: absolute;
+          height: 46px;
+          width: 110px;
+        }
 
         .lazy-bg111 {
           background-image: none;
@@ -64,13 +69,9 @@
             -webkit-transform: translateX(-8px);
             -ms-transform: translateX(-8px);
             transform: translateX(-8px);
-
-            &.lazy-bg {
-              background-image: none;
-            }
           }
 
-          .second-flap-new {
+          #second-flap-new {
             background: url(flap_new.png) 0 0 no-repeat;
             position: absolute;
             display: block;
@@ -103,11 +104,25 @@
       &.arrow {
         width: 15px;
         height: 9px;
-        background: url('images/header/header-sprite-tiny.png') -210px -48px;
+        background-image: url('images/header/header-sprite-tiny.png');
+        // -210px -48px;
       }
     }
   }
 
+  .content-wrap {
+    max-height: calc(100vh - #{rem(115px)});
+
+    & > span {
+      color: color(grey-darker);
+      display: inline-block;
+      font-size: rem(24px);
+      line-height: rem(40px);
+      margin: rem(10px);
+
+      background: url('images/header/chevron-span.png') -210px -48px;
+    }
+  }
 
   .before-case {
     &:before {
