@@ -132,4 +132,48 @@
     }
   }
 
+
+  /* Welcome */
+  .message.welcome {
+    right: rem(180px);
+    top: rem(125px);
+
+    p {
+      position: relative;
+      text-align: center;
+      z-index: 1;
+
+      .souriez {
+        background: url('images/header/souriez.png') no-repeat center bottom;
+        display: block;
+        height: rem(30px);
+        margin: 0 auto rem(5px);
+        overflow: hidden;
+        text-indent: rem(-5000px);
+        width: rem(95px);
+      }
+    }
+  }
+
+  .menulvl2__icons li > span,
+  .menulvl2__icons li > a {
+    color: color(grey-dark);
+    display: block;
+    text-align: center;
+    text-decoration: none;
+    text-transform: uppercase;
+    transition: color .2s ease-in-out;
+
+    &:before,
+    .sprite {
+      background: url('images/header/icons.png') no-repeat center top;
+      background-size: 100% auto;
+      content: '';
+      display: block;
+      margin: 0 auto;
+      height: rem(35px);
+      width: rem(67px);
+    }
+  }
+
 }

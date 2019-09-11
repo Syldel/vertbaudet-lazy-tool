@@ -5,6 +5,7 @@ cheerio = require 'cheerio'
 html5Lint = require 'html5-lint'
 q = require 'q'
 commandLineArgs = require 'command-line-args'
+path = require 'path'
 Entities = require('html-entities').XmlEntities
 entities = new Entities()
 
@@ -36,14 +37,14 @@ module.exports = class App
       else
         @getFilesByExt('scss').then (scssFiles) =>
           if scssFiles.length is 1
-            @scssFilePath = scssFiles[0]
-            @scssProcessus @scssFilePath
+            @scssProcessus scssFiles[0]
           else
             console.log ('0 or more than 1 scss files found! (' + scssFiles + ')').red
             @startHtmPrompt()
 
 
   scssProcessus: (pPath) ->
+    @scssFilePath = pPath
     @getBackgroundsInScss pPath
     .then (pScssData) =>
       @scssData = pScssData
@@ -82,7 +83,10 @@ module.exports = class App
       count++
 
       regTarget = pTarget.replace /[\\[.+*?(){|^$]/g, "\\$&"
-      re = new RegExp '([\\s\\w-#.&:]+){[^{]*' + regTarget , 'gi' # + '[^}]*}', 'gi'
+      #re = new RegExp '([\\s\\w-#.&:]+){[^{]*' + regTarget , 'gi' # + '[^}]*}', 'gi'
+      #re = new RegExp '([\\w-#.&:]+)[\\s]*{[^{]*' + regTarget , 'gi'
+      #re = new RegExp '(&?[#.:]{0,1}[\\w-.:)]+)[\\s]*{[^{]*' + regTarget , 'gi'
+      re = new RegExp '([\\w-#.&:)]+)[\\s]*{[^{]*' + regTarget , 'gi'
 
       pRemBrakToOpen = pRemBrakToOpenArr[count]
       rEl = pResult[count]
@@ -115,6 +119,11 @@ module.exports = class App
             if brakDiff < 1
               pResult2 = parentSel + ' ' + rEl
               brakDiff = 1 # We look for the top level
+
+              #Remove '****)'
+              parRegEx = new RegExp '[\\s]*[\\w-]*\\)', 'g'
+              pResult2 = pResult2.replace parRegEx, ''
+
               results.push pResult2.trim()
               blocks.push bloc
               braks.push brakDiff
@@ -171,9 +180,9 @@ module.exports = class App
               lazyBg: no
 
         console.log '\n'
-        jLazyBgSelectors = @getParentSelector ['.lazy-bg'], data
+        jLazyBgSelectors = @getParentSelector ['.lazy-bg'], data # ['.lazy-bg[\s{]+'], data
         for lazyBgSel in jLazyBgSelectors
-          console.log 'lazyBgSel :'.cyan, lazyBgSel
+          #console.log 'lazyBgSel :'.cyan, lazyBgSel
           for bgEl in @scssAnalyse
             if bgEl.selector is lazyBgSel
               bgEl.lazyBg = yes
@@ -184,24 +193,30 @@ module.exports = class App
 
     deferred.promise
 
+
   addLazyPartInScssPart: (pScssObj) ->
     if not pScssObj.lazyBg
       scssBackgroundUrl = pScssObj.background.replace /[\\[.+*?(){|^$]/g, "\\$&"
 
       selRx = String pScssObj.selector
       selRx = selRx.replace /[\s]*([^\s]+)/g, '$1[\\s{]+[^<]*'
-      selRx = selRx.slice(0, -5) + '[^(]*' # Be sure to get the fist found, Using '(' char
+      selRx = selRx.slice(0, -5) + '[^]*?' # Be sure to get the fist found, use '?' special char
       selRx += scssBackgroundUrl
       console.log 'selRx:'.cyan, selRx
 
       scssBlock = @scssData.match selRx
-      #console.log 'scssBlock:', scssBlock[0]
+      #console.log 'scssBlock[0]:', scssBlock[0]
 
-      #console.log 'pScssObj.background:', pScssObj.background
-      regBg = new RegExp '(([ \t]*)' + scssBackgroundUrl + '[^.]*$)', 'gi'
-      newPart = scssBlock[0].replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
-      #console.log '=====> newPart'.yellow, newPart
-      @scssData = @scssData.replace scssBlock, newPart
+      if scssBlock[0]
+        goodBlock = scssBlock[0]
+
+        #console.log 'pScssObj.background:', pScssObj.background
+        regBg = new RegExp '(([ \t]*)' + scssBackgroundUrl + '[^.]*$)', 'gi'
+        newPart = goodBlock.replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
+        #console.log '=====> newPart'.yellow, newPart
+        @scssData = @scssData.replace goodBlock, newPart
+      else
+        console.log 'No scss block found!'.red
 
 
   buildRegEx: (pHtmlData, pStr, pElems = [], pCaseId = 0) ->
@@ -286,7 +301,7 @@ module.exports = class App
 
 
   analyseHtmlForBackground: (pHtmlData) ->
-    console.log '\nAnalyse background images'
+    console.log '\nAnalyse background images'.blue
 
     for scssObj in @scssAnalyse
       console.log ''
@@ -313,7 +328,7 @@ module.exports = class App
         scssObj.html = {}
         for el in elems
           #console.log 'el:'.blue, el
-          tagElements = el.match /<.*>/g
+          tagElements = el.match /<[\w "'=\-#&;/]+>/g
           lastElement = tagElements.pop()
           #console.log 'lastElement:'.blue, lastElement
 
@@ -409,8 +424,15 @@ module.exports = class App
           #else
           #  console.log ' Old and New elements are same!'.blue
 
+
+      if @scssFilePath
         @analyseHtmlForBackground data
-        #@writeHtml data
+      else
+        console.log '\n'
+        @writeDataInFile 'html', @sourcePath, pHtmlData
+        #.then () =>
+          #@checkHtml5(@sourcePath).then () ->
+          #  console.log 'Completed!'.green
 
 
   imgHandle: (pChImg) ->
@@ -479,13 +501,21 @@ module.exports = class App
   writeDataInFile: (pType, pPath, pData) ->
     console.log ('Overwrite ' + pType + ' file !!!').yellow
     deferred = q.defer()
-    fs.writeFile pPath, pData, 'utf8', (err, data) ->
-      if err
-        console.log (' Error to write ' + pType + ' the file').red, err
-        deferred.reject err
-      else
-        console.log (' The ' + pType + ' file has been overwritten').green
-        deferred.resolve()
+
+    relative = path.relative process.cwd(), pPath
+    console.log (' relative path:').blue, relative
+
+    try
+      fs.writeFile pPath, pData, 'utf8', (err, data) ->
+        if err
+          console.log (' Error to write ' + pType + ' the file').red, err
+          deferred.reject err
+        else
+          console.log (' The ' + pType + ' file has been overwritten').green
+          deferred.resolve()
+    catch error
+      console.log 'catch error'.red, error
+      deferred.reject error
 
     deferred.promise
 
