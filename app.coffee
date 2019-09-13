@@ -23,6 +23,7 @@ module.exports = class App
     optionDefinitions = [
       { name: 'scss', alias: 's', type: String }
       { name: 'ignore-scss', alias: 'i', type: Boolean }
+      { name: 'noscss', alias: 'n', type: Boolean }
     ]
 
     options = commandLineArgs optionDefinitions
@@ -32,7 +33,7 @@ module.exports = class App
       @scssProcessus options.scss
 
     else
-      if options['ignore-scss']
+      if options['ignore-scss'] or options['noscss']
         @startHtmPrompt()
       else
         @getFilesByExt('scss').then (scssFiles) =>
@@ -219,85 +220,14 @@ module.exports = class App
         console.log 'No scss block found!'.red
 
 
-  buildRegEx: (pHtmlData, pStr, pElems = [], pCaseId = 0) ->
-    #console.log '\nbuildRegEx: pCaseId:', pCaseId, ' pElems.length:', pElems.length
-
-    dblClassMatch = pStr.match /([\w-]+)\.([\w-]+)/g
-    #console.log 'dblClassMatch:', dblClassMatch
-
-    # Build combinaisons
-    classMatchCombs = []
-    if dblClassMatch
-      for dblMatch, i in dblClassMatch
-        dblSplits = dblMatch.split '.'
-
-        for split, k in dblSplits
-          tempArr = []
-          for dblMatch2, j in dblClassMatch
-            dblSplits2 = dblMatch2.split '.'
-
-            if i is 0
-              if k is 0
-                if j is 0
-                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
-                if j is 1
-                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
-
-              if k is 1
-                if j is 0
-                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
-                if j is 1
-                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
-
-            if i is 1
-              if k is 0
-                if j is 0
-                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
-                if j is 1
-                  tempArr.push [ dblMatch2, dblSplits2[0] + '.' + dblSplits2[1] ]
-
-              if k is 1
-                if j is 0
-                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
-                if j is 1
-                  tempArr.push [ dblMatch2, dblSplits2[1] + '.' + dblSplits2[0] ]
-
-          classMatchCombs.push tempArr
-
-    #console.log 'classMatchCombs:'.cyan, classMatchCombs
-
-    if pCaseId > classMatchCombs.length - 1
-      return pElems
-    else
-      # Manage several classes case
-      classCombs = classMatchCombs[pCaseId]
-      sourceStr = pStr
-      if classCombs
-        for classComb in classCombs
-          #console.log (' Replace ' + classComb[0] + ' with ' + classComb[1] + '').yellow
-          sourceStr = sourceStr.replace classComb[0], classComb[1]
-
-      pCaseId++
-
-      jSelReg = sourceStr.replace /\.([^\s]+)/g, '<[^>]*class=[^>]*[\\s|"|\']{1}$1[\\s|"|\']{1}[^>]*>'
-      jSelReg = jSelReg.replace /\#([^\s]+)/g, '<[^>]*id=[^>]*[\\s|"|\']{1}$1[\\s|"|\']{1}[^>]*>'
-      jSelReg = jSelReg.replace /\s([\w]+)/g, '[^.]*<$1[^>]*>'
-      jSelReg = jSelReg.replace /\s/g, '[^]*'
-
-      jSelReg = jSelReg.replace /([\w]+)\.([\w]+)/g, '$1[^>]*$2'
-
-      # Close last tag
-      #jSelReg = jSelReg + '[^>]*>'
-      #console.log 'jSelReg:', jSelReg
-
-      superRegEx = new RegExp jSelReg, 'gi'
-      elems = pHtmlData.match superRegEx
-
-      #console.log 'internal elems:'.magenta, elems
-      if elems
-        pElems = pElems.concat elems
-
-      return @buildRegEx pHtmlData, pStr, pElems, pCaseId
+  htmlReplacingWithCheerio: ($, elem) ->
+    parentHtml = $(elem).parent().parent().html()
+    srcElHtml = $(elem).parent().html()
+    $(elem).addClass 'lazy-bg'
+    $(elem).attr 'data-loaded', 'false'
+    elHtml = $(elem).parent().html()
+    newEl = parentHtml.replace srcElHtml, elHtml
+    [parentHtml, newEl]
 
 
   analyseHtmlForBackground: (pHtmlData) ->
@@ -319,34 +249,25 @@ module.exports = class App
       jSelect = String(scssObj.selector).replace jRegEx, ''
       console.log 'jSelect:', jSelect
 
-      elems = @buildRegEx pHtmlData, jSelect
-      #console.log 'elems:'.green, elems
+      $ = cheerio.load pHtmlData
+      elems = $ jSelect
 
       if not elems or elems.length is 0
         console.log ('No DOM elements found for ' + scssObj.background + ' in ' + jSelect + ' !').red
       else
-        scssObj.html = {}
-        for el in elems
-          #console.log 'el:'.blue, el
-          tagElements = el.match /<[\w "'=\-#&;/]+>/g
-          lastElement = tagElements.pop()
-          #console.log 'lastElement:'.blue, lastElement
+        resultArr = []
+        elems.each (i, elem) =>
+          resultArr.push @htmlReplacingWithCheerio $, elem
 
-          scssObj.html.cheerio = cheerio.load lastElement
-          cheerEl = scssObj.html.cheerio('*')
-          cheerEl.addClass 'lazy-bg'
-          cheerEl.attr 'data-loaded', 'false'
+        for res, i in resultArr
+          if i is 0
+            firstElement = res[0]
+          if i is resultArr.length - 1
+            finalReplacement = res[1]
 
-          elHtml = scssObj.html.cheerio('body').html()
-          #console.log 'elHtml:', elHtml
-          elHtml = elHtml.replace /<\/[^>]+>/g, ''
-          console.log 'elHtml (After remove closing tag) :', elHtml
-
-          newEl = el.replace lastElement, elHtml
-          pHtmlData = pHtmlData.replace el, newEl
+        pHtmlData = pHtmlData.replace firstElement, finalReplacement
 
         @addLazyPartInScssPart scssObj
-
 
     console.log '\n'
     @writeDataInFile 'html', @sourcePath, pHtmlData
@@ -429,7 +350,7 @@ module.exports = class App
         @analyseHtmlForBackground data
       else
         console.log '\n'
-        @writeDataInFile 'html', @sourcePath, pHtmlData
+        @writeDataInFile 'html', @sourcePath, data
         #.then () =>
           #@checkHtml5(@sourcePath).then () ->
           #  console.log 'Completed!'.green
