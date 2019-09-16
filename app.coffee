@@ -17,6 +17,8 @@ module.exports = class App
   scssData: undefined
   scssAnalyse: undefined
 
+  options: undefined
+
   constructor: ->
     console.log "process.cwd()".cyan, process.cwd()
 
@@ -24,16 +26,17 @@ module.exports = class App
       { name: 'scss', alias: 's', type: String }
       { name: 'ignore-scss', alias: 'i', type: Boolean }
       { name: 'noscss', alias: 'n', type: Boolean }
+      { name: 'ignore-class', alias: 'g', type: String }
     ]
 
-    options = commandLineArgs optionDefinitions
-    console.log 'options:', options
+    @options = commandLineArgs optionDefinitions
+    console.log 'options:', @options
 
-    if options.scss
-      @scssProcessus options.scss
+    if @options.scss
+      @scssProcessus @options.scss
 
     else
-      if options['ignore-scss'] or options['noscss']
+      if @options['ignore-scss'] or @options['noscss']
         @startHtmPrompt()
       else
         @getFilesByExt('scss').then (scssFiles) =>
@@ -83,10 +86,12 @@ module.exports = class App
     for pTarget in pBlocks
       count++
 
-      regTarget = pTarget.replace /[\\[.+*?(){|^$]/g, "\\$&"
-      #re = new RegExp '([\\s\\w-#.&:]+){[^{]*' + regTarget , 'gi' # + '[^}]*}', 'gi'
-      #re = new RegExp '([\\w-#.&:]+)[\\s]*{[^{]*' + regTarget , 'gi'
-      #re = new RegExp '(&?[#.:]{0,1}[\\w-.:)]+)[\\s]*{[^{]*' + regTarget , 'gi'
+      if (typeof pTarget) is 'string'
+        regTarget = pTarget.replace /[\\[.+*?(){|^$]/g, "\\$&"
+      else
+        tarRegEx = String(pTarget).replace /\\\//g, ''
+        regTarget = tarRegEx.replace /\/([^]*)\/([\w]{0,2}$)/, '$1'
+
       re = new RegExp '([\\w-#.&:)]+)[\\s]*{[^{]*' + regTarget , 'gi'
 
       pRemBrakToOpen = pRemBrakToOpenArr[count]
@@ -126,12 +131,12 @@ module.exports = class App
               pResult2 = pResult2.replace parRegEx, ''
 
               results.push pResult2.trim()
-              blocks.push bloc
+              blocks.push bloc.substr(0, 1000)
               braks.push brakDiff
             else
               #console.log ' Ignore this element'.blue
               results.push rEl
-              blocks.push bloc
+              blocks.push bloc.substr(0, 1000)
               braks.push brakDiff
 
       #console.log 'whileCount:', whileCount
@@ -181,7 +186,8 @@ module.exports = class App
               lazyBg: no
 
         console.log '\n'
-        jLazyBgSelectors = @getParentSelector ['.lazy-bg'], data # ['.lazy-bg[\s{]+'], data
+        lazyBgRegEx = new RegExp '/\\.lazy-bg[\\s]*{/', 'gi'
+        jLazyBgSelectors = @getParentSelector [lazyBgRegEx], data
         for lazyBgSel in jLazyBgSelectors
           #console.log 'lazyBgSel :'.cyan, lazyBgSel
           for bgEl in @scssAnalyse
@@ -218,6 +224,8 @@ module.exports = class App
         @scssData = @scssData.replace goodBlock, newPart
       else
         console.log 'No scss block found!'.red
+    else
+      console.log ' ".lazy-bg" part already present in SCSS file for this element!'.cyan
 
 
   htmlReplacingWithCheerio: ($, elem) ->
@@ -249,23 +257,27 @@ module.exports = class App
       jSelect = String(scssObj.selector).replace jRegEx, ''
       console.log 'jSelect:', jSelect
 
+      ignoreClass = @options['ignore-class']
+      if ignoreClass
+        ignoreClass = ignoreClass.replace /[\\[.+*?(){|^$]/g, "\\$&"
+        regExIgnClass = new RegExp '[\\s]*[.]*' + ignoreClass + '[\\w]*' , 'gi'
+        jSelect = jSelect.replace regExIgnClass, ''
+        console.log 'jSelect without'.magenta, ignoreClass, '=>', jSelect
+
       $ = cheerio.load pHtmlData
       elems = $ jSelect
 
       if not elems or elems.length is 0
         console.log ('No DOM elements found for ' + scssObj.background + ' in ' + jSelect + ' !').red
       else
-        resultArr = []
         elems.each (i, elem) =>
-          resultArr.push @htmlReplacingWithCheerio $, elem
+          resArr = @htmlReplacingWithCheerio $, elem
+          pHtmlData = pHtmlData.replace resArr[0], resArr[1]
 
-        for res, i in resultArr
-          if i is 0
-            firstElement = res[0]
-          if i is resultArr.length - 1
-            finalReplacement = res[1]
-
-        pHtmlData = pHtmlData.replace firstElement, finalReplacement
+        #console.log ' UPDATE HTML:'.magenta,
+          #firstElement.replace(/[\r\n\t][\s]*/g, '').replace(/>[\s]+</g, '><').substr(0, 50) + '...',
+          #'<===>'.yellow,
+          #finalReplacement.replace(/[\r\n\t][\s]*/g, '').replace(/>[\s]+</g, '><').substr(0, 50) + '...'
 
         @addLazyPartInScssPart scssObj
 

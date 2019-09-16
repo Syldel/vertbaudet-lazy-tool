@@ -107,6 +107,9 @@
           height: 9px;
           background-image: url('images/header/header-sprite-tiny.png');
           // -210px -48px;
+          .lazy-bg {
+            background-image: none;
+          }
         }
       }
     }
