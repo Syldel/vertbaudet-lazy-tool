@@ -299,7 +299,7 @@ module.exports = class App
     console.log ''
 
     @getFilesByExt('htm').then (htmFiles) =>
-      if htmFiles.length is 1
+      if htmFiles.length >= 1
         htmlFile = htmFiles[0]
       else
         htmlFile = '_test.htm'
@@ -386,9 +386,8 @@ module.exports = class App
           imageName = pChImg.attr('data-src')
         else
           if pChImg.attr('data-image')
-            imageName = pChImg.attr('data-image').match /data-image="{'src': '([^<]*)'}"/
-            if not imageName
-              imageName = pChImg.attr('data-image').match /data-image='{"src": "([^<]*)"}'/
+            imageName = pChImg.attr('data-image').match /{[ ]*['"]src['"]:[ ]*['"]([^<]*)['"][ ]*}/
+            imageName = imageName[1]
             console.log ' alt imageName (from "data-image") :', imageName
 
       if imageName
