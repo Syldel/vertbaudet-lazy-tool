@@ -209,19 +209,22 @@ module.exports = class App
       selRx = selRx.replace /[\s]*([^\s]+)/g, '$1[\\s{]+[^<]*'
       selRx = selRx.slice(0, -5) + '[^]*?' # Be sure to get the fist found, use '?' special char
       selRx += scssBackgroundUrl
-      console.log 'selRx:'.cyan, selRx
+      #console.log 'selRx:'.cyan, selRx
 
       scssBlock = @scssData.match selRx
       #console.log 'scssBlock[0]:', scssBlock[0]
 
       if scssBlock[0]
         goodBlock = scssBlock[0]
+        console.log 'Add ".lazy-bg" part in SCSS file!'.blue
 
         #console.log 'pScssObj.background:', pScssObj.background
         regBg = new RegExp '(([ \t]*)' + scssBackgroundUrl + '[^.]*$)', 'gi'
         newPart = goodBlock.replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
         #console.log '=====> newPart'.yellow, newPart
         @scssData = @scssData.replace goodBlock, newPart
+
+        pScssObj.lazyBg = yes
       else
         console.log 'No scss block found!'.red
     else
@@ -287,11 +290,13 @@ module.exports = class App
       #@checkHtml5(@sourcePath).then () ->
       #  console.log 'Completed!'.green
       @writeDataInFile 'scss', @scssFilePath, @scssData
-      #.then () =>
+      .then () =>
       #  console.log 'Completed!'.green
+        @startHtmPrompt()
 
 
   startHtmPrompt: ->
+    console.log ''
 
     @getFilesByExt('htm').then (htmFiles) =>
       if htmFiles.length is 1
@@ -363,9 +368,10 @@ module.exports = class App
       else
         console.log '\n'
         @writeDataInFile 'html', @sourcePath, data
-        #.then () =>
+        .then () =>
           #@checkHtml5(@sourcePath).then () ->
           #  console.log 'Completed!'.green
+          @startHtmPrompt()
 
 
   imgHandle: (pChImg) ->
