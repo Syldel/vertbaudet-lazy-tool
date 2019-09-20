@@ -18,6 +18,7 @@ module.exports = class App
   scssAnalyse: undefined
 
   options: undefined
+  htmlPromptId: -1
 
   constructor: ->
     console.log "process.cwd()".cyan, process.cwd()
@@ -39,7 +40,7 @@ module.exports = class App
       if @options['ignore-scss'] or @options['noscss']
         @startHtmPrompt()
       else
-        @getFilesByExt('scss').then (scssFiles) =>
+        @getFilesByExt('scss', no).then (scssFiles) =>
           if scssFiles.length is 1
             @scssProcessus scssFiles[0]
           else
@@ -55,7 +56,7 @@ module.exports = class App
       @startHtmPrompt()
 
 
-  getFilesByExt: (pExt) ->
+  getFilesByExt: (pExt, pWithUnderscore) ->
     deferred = q.defer()
     fs.readdir process.cwd(), (err, files) ->
       if err
@@ -63,7 +64,10 @@ module.exports = class App
         deferred.reject err
       else
         filesByExt = files.filter (file) ->
-          file.indexOf('.' + pExt) isnt -1 # and file.substr(0, 1) isnt '_'
+          if pWithUnderscore
+            return file.indexOf('.' + pExt) isnt -1
+          else
+            return file.indexOf('.' + pExt) isnt -1 and file.substr(0, 1) isnt '_'
 
         if filesByExt.length is 0
           console.log ('No .' + pExt + ' files found!').red
@@ -76,7 +80,6 @@ module.exports = class App
 
 
   getParentSelector: (pBlocks, pData, pRemBrakToOpenArr = [1], pResult = ['']) ->
-    #console.log '\nLook Parent Of '.magenta, pTarget
     #console.log '\ngetParentSelector pResult'.magenta, pResult
 
     results = []
@@ -87,12 +90,14 @@ module.exports = class App
       count++
 
       if (typeof pTarget) is 'string'
+        #console.log ' pTarget:'.green, pTarget.substr(0, 200), '(...)'
         regTarget = pTarget.replace /[\\[.+*?(){|^$]/g, "\\$&"
       else
+        #console.log ' pTarget:'.green, pTarget
         tarRegEx = String(pTarget).replace /\\\//g, ''
         regTarget = tarRegEx.replace /\/([^]*)\/([\w]{0,2}$)/, '$1'
 
-      re = new RegExp '([\\w-#.&:)]+)[\\s]*{[^{]*' + regTarget , 'gi'
+      re = new RegExp '([\\w-#.&:*% >)(@$\\[\\]]+)[\\s]*{[^{]*' + regTarget , 'gi'
 
       pRemBrakToOpen = pRemBrakToOpenArr[count]
       rEl = pResult[count]
@@ -107,28 +112,32 @@ module.exports = class App
           #console.log '\nregData.index:'.yellow, regData.index
           if regData[0]
             bloc = regData[0]
+            #console.log ' bloc:'.magenta, bloc.substr(0, 100), '(...)'
 
             diffBlock = bloc.replace pTarget, ''
-            #console.log 'diffBlock:'.magenta, diffBlock
+            #console.log ' diffBlock:'.magenta, diffBlock
             #console.log '  Count of {  =>', (diffBlock.match(/{/g) or []).length,
             #  ' /  Count of }  =>', (diffBlock.match(/}/g) or []).length
 
           if regData[1]
             parentSel = String(regData[1]).trim()
-            #console.log 'regData[1] parentSel:'.cyan, parentSel
+            #console.log (' parentSel: "' + parentSel + '"').cyan
 
             openBrakCount = (diffBlock.match(/{/g) or []).length
             closeBrakCount = (diffBlock.match(/}/g) or []).length
             brakDiff = closeBrakCount - openBrakCount + pRemBrakToOpen
-            #console.log 'brakDiff:', brakDiff
+            #console.log ' brakDiff:', brakDiff
 
-            if brakDiff < 1
+            mediaMatchBool = parentSel.match(/@media[^}]*/) isnt null
+            #console.log ' mediaMatchBool:'.yellow, mediaMatchBool
+
+            if brakDiff < 1 and not mediaMatchBool
               pResult2 = parentSel + ' ' + rEl
               brakDiff = 1 # We look for the top level
 
               #Remove '****)'
-              parRegEx = new RegExp '[\\s]*[\\w-]*\\)', 'g'
-              pResult2 = pResult2.replace parRegEx, ''
+              #parRegEx = new RegExp '[\\s]*[\\w-]*\\)', 'g'
+              #pResult2 = pResult2.replace parRegEx, ''
 
               results.push pResult2.trim()
               blocks.push bloc.substr(0, 1000)
@@ -139,7 +148,7 @@ module.exports = class App
               blocks.push bloc.substr(0, 1000)
               braks.push brakDiff
 
-      #console.log 'whileCount:', whileCount
+      #console.log ' whileCount:', whileCount
       if not currentWhileHappends
         results = results.concat [rEl]
         blocks = blocks.concat [pTarget]
@@ -150,7 +159,7 @@ module.exports = class App
       return pResult
     else
       selectResult = @getParentSelector blocks, pData, braks, results
-      #console.log 'selectResult', count, ' => ', selectResult
+      #console.log ' selectResult', count, ' => ', selectResult
       return selectResult
 
 
@@ -176,7 +185,10 @@ module.exports = class App
           console.log '\nbg:'.green, bg
 
           jSelectors = @getParentSelector [bg], data
-          console.log 'jSelectors:'.green, jSelectors
+          #console.log 'jSelectors:'.green, jSelectors
+          jSelectors = jSelectors.filter (item, index) ->
+            jSelectors.indexOf(item) is index
+          console.log 'jSelectors (without duplicate items) :'.green, jSelectors
 
           for jSel in jSelectors
             @scssAnalyse.push
@@ -218,9 +230,12 @@ module.exports = class App
         goodBlock = scssBlock[0]
         console.log 'Add ".lazy-bg" part in SCSS file!'.blue
 
+        regBgLineExcept = new RegExp '(\\n([ \\t]*)([\\w -.#]+){([^\\n]*)(' + scssBackgroundUrl + ')[^.]*$)', 'gi'
+        tmpBlock = goodBlock.replace regBgLineExcept, '\n$2$3{\n$2  $5'
+
         #console.log 'pScssObj.background:', pScssObj.background
-        regBg = new RegExp '(([ \t]*)' + scssBackgroundUrl + '[^.]*$)', 'gi'
-        newPart = goodBlock.replace regBg, '$1\n$2&.lazy-bg {\n$2  background-image: none;\n$2}'
+        regBg = new RegExp '(([ \t]*)([\/]*)[ ]*' + scssBackgroundUrl + '[^.]*$)', 'gi'
+        newPart = tmpBlock.replace regBg, '$1\n$2$3&.lazy-bg {\n$2$3  background-image: none;\n$2$3}'
         #console.log '=====> newPart'.yellow, newPart
         @scssData = @scssData.replace goodBlock, newPart
 
@@ -298,9 +313,14 @@ module.exports = class App
   startHtmPrompt: ->
     console.log ''
 
-    @getFilesByExt('htm').then (htmFiles) =>
+    @getFilesByExt('htm', yes).then (htmFiles) =>
       if htmFiles.length >= 1
-        htmlFile = htmFiles[0]
+        @htmlPromptId++
+        if htmFiles[@htmlPromptId]
+          htmlFile = htmFiles[@htmlPromptId]
+        else
+          console.log 'All HTML files have been analysed!'.magenta
+          return
       else
         htmlFile = '_test.htm'
 
