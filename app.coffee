@@ -221,6 +221,7 @@ module.exports = class App
       selRx = selRx.replace /[\s]*([^\s]+)/g, '$1[\\s{]+[^<]*'
       selRx = selRx.slice(0, -5) + '[^]*?' # Be sure to get the fist found, use '?' special char
       selRx += scssBackgroundUrl
+      selRx += '[^}]*}' # Get the last part after background***
       #console.log 'selRx:'.cyan, selRx
 
       scssBlock = @scssData.match selRx
@@ -230,13 +231,23 @@ module.exports = class App
         goodBlock = scssBlock[0]
         console.log 'Add ".lazy-bg" part in SCSS file!'.blue
 
-        regBgLineExcept = new RegExp '(\\n([ \\t]*)([\\w -.#]+){([^\\n]*)(' + scssBackgroundUrl + ')[^.]*$)', 'gi'
-        tmpBlock = goodBlock.replace regBgLineExcept, '\n$2$3{\n$2  $5'
+        # Manage Line form
+        regBgBreakLines = new RegExp '(\\n([ \\t]*)([\/]*)([\\w -.#]+){[ ]*([^\\n]*' + scssBackgroundUrl + '[^.]*)$)', 'gi'
+        match = regBgBreakLines.exec goodBlock
 
-        #console.log 'pScssObj.background:', pScssObj.background
-        regBg = new RegExp '(([ \t]*)([\/]*)[ ]*' + scssBackgroundUrl + '[^.]*$)', 'gi'
-        newPart = tmpBlock.replace regBg, '$1\n$2$3&.lazy-bg {\n$2$3  background-image: none;\n$2$3}'
-        #console.log '=====> newPart'.yellow, newPart
+        if match
+          breakLines = match[5].replace /;[ ]*/g, ';\n' + match[2] + match[3] + '  '
+          tmpBlock = goodBlock.replace match[0], '\n' + match[2] + match[3] + match[4] + '{\n' + match[2] + match[3] + '  ' + breakLines
+
+          regExL = new RegExp match[2] + match[3] + '  }$', ''
+          tmpBlock = tmpBlock.replace regExL, match[2] + match[3] + '}'
+        else
+          #console.log '(Not a line form) match:'.red, match
+          tmpBlock = goodBlock
+
+        regBg = new RegExp '(([ \t]*)([\/]*)([ ]*)' + scssBackgroundUrl + '([^.]*)$)', 'gi'
+        newPart = tmpBlock.replace regBg, '$2$3$4' + pScssObj.background + '\n$2$3$4&.lazy-bg {\n$2$3$4  background-image: none;\n$2$3$4}$5'
+        #console.log '=====> newPart:'.yellow, newPart
         @scssData = @scssData.replace goodBlock, newPart
 
         pScssObj.lazyBg = yes
