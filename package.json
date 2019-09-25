@@ -1,11 +1,11 @@
 {
-  "name": "vertbaudet-tools",
+  "name": "vertbaudet-lazy-tool",
   "version": "1.0.0",
   "description": "Tools to work on vertbaudet website performances",
   "main": "app.js",
   "repository": {
     "type": "git",
-    "url": "git@github.com:Syldel/vertbaudet-tools.git"
+    "url": "git@github.com:Syldel/vertbaudet-lazy-tool.git"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -26,7 +26,7 @@
     "prompt": "^1.0.0",
     "q": "^1.5.1"
   },
-  "homepage": "https://github.com/Syldel/vertbaudet-tools#readme",
+  "homepage": "https://github.com/Syldel/vertbaudet-lazy-tool#readme",
   "bin": {
     "vb-tools": "bin/vbtools.js"
   },

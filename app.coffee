@@ -71,7 +71,7 @@ module.exports = class App
 
         if filesByExt.length is 0
           console.log ('No .' + pExt + ' files found!').red
-          deferred.reject()
+          deferred.resolve []
         else
           console.log ' => .' + pExt + ' files:', (filesByExt.join(', ')).yellow
           deferred.resolve filesByExt
@@ -185,10 +185,9 @@ module.exports = class App
           console.log '\nbg:'.green, bg
 
           jSelectors = @getParentSelector [bg], data
-          #console.log 'jSelectors:'.green, jSelectors
           jSelectors = jSelectors.filter (item, index) ->
             jSelectors.indexOf(item) is index
-          console.log 'jSelectors (without duplicate items) :'.green, jSelectors
+          console.log 'jSelectors:'.green, jSelectors
 
           for jSel in jSelectors
             @scssAnalyse.push
