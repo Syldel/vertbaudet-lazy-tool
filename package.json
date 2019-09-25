@@ -31,7 +31,7 @@
     "vb-tools": "bin/vbtools.js"
   },
   "devDependencies": {
-    "gulp": "^3.9.1",
+    "gulp": "^4.0.2",
     "gulp-coffee": "^3.0.3",
     "gulp-coffeelint": "^0.6.0"
   }
