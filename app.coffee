@@ -135,10 +135,6 @@ module.exports = class App
               pResult2 = parentSel + ' ' + rEl
               brakDiff = 1 # We look for the top level
 
-              #Remove '****)'
-              #parRegEx = new RegExp '[\\s]*[\\w-]*\\)', 'g'
-              #pResult2 = pResult2.replace parRegEx, ''
-
               results.push pResult2.trim()
               blocks.push bloc.substr(0, 1000)
               braks.push brakDiff
@@ -177,35 +173,38 @@ module.exports = class App
 
         @scssAnalyse = []
 
-        # Remove doubloons, (@getParentSelector will manage duplicate items)
-        bgs = bgs.filter (item, index) ->
-          bgs.indexOf(item) is index
+        if bgs
+          # Remove doubloons, (@getParentSelector will manage duplicate items)
+          bgs = bgs.filter (item, index) ->
+            bgs.indexOf(item) is index
 
-        for bg in bgs
-          console.log '\nbg:'.green, bg
+          for bg in bgs
+            console.log '\nbg:'.green, bg
 
-          jSelectors = @getParentSelector [bg], data
-          jSelectors = jSelectors.filter (item, index) ->
-            jSelectors.indexOf(item) is index
-          console.log 'jSelectors:'.green, jSelectors
+            jSelectors = @getParentSelector [bg], data
+            jSelectors = jSelectors.filter (item, index) ->
+              jSelectors.indexOf(item) is index
+            console.log 'jSelectors:'.green, jSelectors
 
-          for jSel in jSelectors
-            @scssAnalyse.push
-              scssFile: pPath
-              background: bg
-              selector: jSel
-              lazyBg: no
+            for jSel in jSelectors
+              @scssAnalyse.push
+                scssFile: pPath
+                background: bg
+                selector: jSel
+                lazyBg: no
 
-        console.log '\n'
-        lazyBgRegEx = new RegExp '/\\.lazy-bg[\\s]*{/', 'gi'
-        jLazyBgSelectors = @getParentSelector [lazyBgRegEx], data
-        for lazyBgSel in jLazyBgSelectors
-          #console.log 'lazyBgSel :'.cyan, lazyBgSel
-          for bgEl in @scssAnalyse
-            if bgEl.selector is lazyBgSel
-              bgEl.lazyBg = yes
+          console.log '\n'
+          lazyBgRegEx = new RegExp '/\\.lazy-bg[\\s]*{/', 'gi'
+          jLazyBgSelectors = @getParentSelector [lazyBgRegEx], data
+          for lazyBgSel in jLazyBgSelectors
+            #console.log 'lazyBgSel :'.cyan, lazyBgSel
+            for bgEl in @scssAnalyse
+              if bgEl.selector is lazyBgSel
+                bgEl.lazyBg = yes
 
-        #console.log '@scssAnalyse:', @scssAnalyse
+          #console.log '@scssAnalyse:', @scssAnalyse
+        else
+          console.log 'No backgrounds found!'.red
 
         deferred.resolve data
 
