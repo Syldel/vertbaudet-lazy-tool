@@ -10,7 +10,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "coffee app.coffee",
-    "build": "coffee -c app.coffee"
+    "build": "coffee -c app.coffee",
+    "postinstall": "npm run build"
   },
   "author": "Sylvain D.",
   "license": "ISC",
